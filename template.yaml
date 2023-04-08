@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: Cofferdam Lambda Prototype
+
+Resources:
+  ######################################################################################################################
+  # Layer with build capabilities, automatically execute pip install -r requirements.txt -t installing libraries
+  ######################################################################################################################
+
+  GraphqlLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: appsync.amazonaws.com
+        Version: 2012-10-17
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Effect: Allow
+                Resource:
+                  - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/appsync/apis/*
+                  - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/appsync/apis/*:log-stream:*
+            Version: 2012-10-17
+          PolicyName: Log
+      RoleName:
+        Fn::Sub: ${AWS::StackName}-Graphql-logs
+
+  CofferdamJavaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: cofferdam.DescribeProjectHandler::handleRequest
+      Runtime: java11
+      CodeUri: .
+      MemorySize: 512
+      Policies:
+        - Statement:
+            - Sid: IotTwinMakerQueryAccess
+              Effect: Allow
+              Action:
+                - iottwinmaker:ExecuteQuery
+              Resource: '*'
+      Timeout: 30
+      Events:
+        ProxyResource:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: any
+
+  CofferdamJavaFunctionInvokerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: appsync.amazonaws.com
+        Version: 2012-10-17
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - lambda:invokeFunction
+                Effect: Allow
+                Resource:
+                  - Fn::Sub: ${CofferdamJavaFunction.Arn}
+                  - Fn::Sub: ${CofferdamJavaFunction.Arn}:*
+            Version: 2012-10-17
+          PolicyName: Log
+      RoleName:
+        Fn::Sub: ${AWS::StackName}-CofferdamLambda-Invoker
+
+  CofferdamAppSyncApi:
+    Type: AWS::AppSync::GraphQLApi
+    Properties:
+      Name: "CofferdamApi"
+      AuthenticationType: "API_KEY"
+      LogConfig:
+        CloudWatchLogsRoleArn:
+          Fn::GetAtt:
+            - GraphqlLogsRole
+            - Arn
+        ExcludeVerboseContent: false
+        FieldLogLevel: ALL
+
+      #UserPoolConfig:
+      #  UserPoolId: !Ref AuthUserPool
+      #  AwsRegion: !Ref AWS::Region
+      #  DefaultAction: "ALLOW"
+
+  CofferdamDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt CofferdamAppSyncApi.ApiId
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt CofferdamJavaFunction.Arn
+      Name: DataSource
+      ServiceRoleArn: !GetAtt CofferdamJavaFunctionInvokerRole.Arn
+      Type: AWS_LAMBDA
+
+  CofferdamAppSyncSchema:
+    Type: AWS::AppSync::GraphQLSchema
+    Properties:
+      ApiId: !GetAtt CofferdamAppSyncApi.ApiId
+      DefinitionS3Location: ./schema.graphql
+
+  CofferdamAppSyncResolver:
+    Type: "AWS::AppSync::Resolver"
+    Properties:
+      ApiId: !GetAtt CofferdamAppSyncApi.ApiId
+      TypeName: "Query"
+      FieldName: "describeProject"
+      DataSourceName: !GetAtt CofferdamDataSource.Name
+      RequestMappingTemplate: |
+        {
+            "version" : "2017-02-28",
+            "operation": "Invoke",
+            "payload": $util.toJson($context.arguments)
+        }
+      ResponseMappingTemplate: |
+        $util.toJson($context.result)
+
+Outputs:
+  CofferdamJavaApi:
+    Description: URL for application
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/ping'
+    Export:
+      Name: CofferdamJavaApi
+

@@ -1,0 +1,59 @@
+
+
+interface Arn {
+    arn: String!
+}
+
+interface ResourceIdentifier {
+    id: String!
+    name: String!
+}
+
+interface Description {
+    description: String
+}
+
+enum DataType {
+    STRING
+    INTEGER
+    DOUBLE
+    BOOLEAN
+    STRUCT
+}
+
+type Property implements ResourceIdentifier & Description {
+    id: String!
+    name: String!
+    description: String
+    dataType: DataType!
+}
+
+type Hierarchy implements ResourceIdentifier {
+    id: String!
+    name: String!
+    childAssetModelId: String!
+}
+
+type AssetModel implements Arn & ResourceIdentifier & Description {
+    arn: String!
+    id: String!
+    name: String!
+    description: String
+    hierarchies: [Hierarchy!]!
+}
+
+type Asset implements Arn & ResourceIdentifier & Description {
+    arn: String!
+    id: String!
+    name: String!
+    description: String
+    modelId: String!
+}
+
+input Project {
+    workspaceName: String!
+}
+
+type Query {
+    describeProject(project: Project): [Asset]!
+}

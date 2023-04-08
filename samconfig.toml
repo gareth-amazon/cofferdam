@@ -1,0 +1,11 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "cofferdam-demo"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-1d9pjcaqijvvs"
+s3_prefix = "cofferdam-demo"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+image_repositories = []
