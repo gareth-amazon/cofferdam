@@ -1,10 +1,8 @@
 package cofferdam.util;
 import graphql.com.google.common.collect.ImmutableList;
 import graphql.com.google.common.collect.ImmutableMap;
-import software.amazon.awssdk.core.SdkNumber;
 import software.amazon.awssdk.core.document.Document;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.InputMismatchException;
 import java.util.List;
@@ -70,7 +68,7 @@ public class DocumentConverter {
 
     public Object mapScalarType(Document doc) {
         if (doc.isNumber()) {
-            return doc.asNumber().bigDecimalValue();
+            return doc.asNumber();
         } else if (doc.isString()) {
             return doc.asString();
         } else if (doc.isBoolean()) {

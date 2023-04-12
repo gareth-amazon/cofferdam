@@ -21,11 +21,27 @@ enum DataType {
     STRUCT
 }
 
-type Property implements ResourceIdentifier & Description {
+enum PropertyType {
+    ATTRIBUTE
+    MEASUREMENT
+    METRIC
+    TRANSFORM
+}
+
+# im not sure I like this, but its about the only way to make this work
+type AttributeValue {
+    stringValue: String
+    intValue: Int
+    floatValue: Float
+    booleanValue: Boolean
+}
+
+type Property implements ResourceIdentifier {
     id: String!
     name: String!
-    description: String
-    dataType: DataType!
+    #type: PropertyType!
+    # if the type is an attribute, a value will be included
+    value: AttributeValue
 }
 
 type Hierarchy implements ResourceIdentifier {
@@ -34,12 +50,22 @@ type Hierarchy implements ResourceIdentifier {
     childAssetModelId: String!
 }
 
+type PropertyDefinition implements ResourceIdentifier{
+    id: String!
+    name: String!
+    propertyType: PropertyType!
+    dataType: DataType!
+    defaultValue: AttributeValue
+    unit: String
+}
+
 type AssetModel implements Arn & ResourceIdentifier & Description {
     arn: String!
     id: String!
     name: String!
     description: String
-    hierarchies: [Hierarchy!]!
+    properties: [PropertyDefinition]!
+    #hierarchies: [Hierarchy!]!
 }
 
 type Asset implements Arn & ResourceIdentifier & Description {
@@ -48,6 +74,12 @@ type Asset implements Arn & ResourceIdentifier & Description {
     name: String!
     description: String
     modelId: String!
+    properties: [Property]!
+}
+
+type ProjectDescription {
+    assets: [Asset]!
+    models: [AssetModel]!
 }
 
 input Project {
@@ -55,5 +87,5 @@ input Project {
 }
 
 type Query {
-    describeProject(project: Project): [Asset]!
+    describeProject(project: Project): ProjectDescription!
 }

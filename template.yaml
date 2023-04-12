@@ -42,10 +42,16 @@ Resources:
       MemorySize: 512
       Policies:
         - Statement:
-            - Sid: IotTwinMakerQueryAccess
+            - Sid: IotTwinMakerAccess
               Effect: Allow
               Action:
-                - iottwinmaker:ExecuteQuery
+                - iottwinmaker:*
+              Resource: '*'
+        - Statement:
+            - Sid: IotSiteWiseAccess
+              Effect: Allow
+              Action:
+                - iotsitewise:*
               Resource: '*'
       Timeout: 30
       Events:

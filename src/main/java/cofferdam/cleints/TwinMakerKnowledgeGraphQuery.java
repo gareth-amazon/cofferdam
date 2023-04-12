@@ -1,5 +1,6 @@
-package cofferdam;
+package cofferdam.cleints;
 
+import cofferdam.factories.AssetFactory;
 import cofferdam.generated.types.Asset;
 import cofferdam.generated.types.Project;
 import cofferdam.util.DocumentConverter;
@@ -35,17 +36,11 @@ public class TwinMakerKnowledgeGraphQuery {
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
                 .build();
     }
-
     public Asset toAsset(Document doc) {
         Map<String, Object> assetData = new DocumentConverter().mapMapDocument(doc);
-        logger.log("ASSET (maybe?): " + gson.toJson(assetData));
-        return Asset.newBuilder()
-                .id((String) assetData.get("arn")) // TODO: get from properties
-                .arn((String) assetData.get("arn"))
-                .name((String) assetData.get("entityName"))
-                .description((String) assetData.get("description"))
-                .modelId((String) assetData.get("arn")) // TODO: get from properties
-                .build();
+        //logger.log("ASSET (maybe?): " + gson.toJson(assetData));
+        AssetFactory assetFactory = new AssetFactory(assetData);
+        return assetFactory.buildAsset();
     }
 
     public List<Asset> describeProject(Project project) {
