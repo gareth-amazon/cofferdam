@@ -3,6 +3,7 @@ package cofferdam.cleints;
 import cofferdam.factories.AssetModelFactory;
 import cofferdam.generated.types.Asset;
 import cofferdam.generated.types.AssetModel;
+import cofferdam.util.ModelTreeNode;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -29,6 +30,8 @@ public class SiteWiseModels {
     private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private Map<String, AssetModel> assetModelsById;
     private Map<String, AssetModel> assetModelsByName;
+    private ImmutableMap<String, DescribeAssetModelResponse> models;
+    private List<ModelTreeNode> roots;
 
     public SiteWiseModels(LambdaLogger logger, String workspaceName) {
         this.logger = logger;
@@ -48,17 +51,21 @@ public class SiteWiseModels {
         ListAssetModelsResponse results = this.listAssetModels();
         ImmutableMap.Builder<String, AssetModel> idBuilder = ImmutableMap.builder();
         ImmutableMap.Builder<String, AssetModel> nameBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<String, DescribeAssetModelResponse> modelsBuilder = new ImmutableMap.Builder<>();
 
         results.assetModelSummaries().stream().parallel().forEach(summary -> {
             DescribeAssetModelResponse assetModelDescription = describeAssetModels(summary.id());
+            modelsBuilder.put(assetModelDescription.assetModelId(), assetModelDescription);
             AssetModel assetModel = AssetModelFactory.build(assetModelDescription);
             idBuilder.put(assetModel.getId(), assetModel);
             // TODO: many assets might share the same name in the future, use a list:
             nameBuilder.put(assetModel.getName(), assetModel);
         });
 
+        this.models = modelsBuilder.build();
         this.assetModelsById = idBuilder.build();
         this.assetModelsByName = nameBuilder.build();
+        this.roots = ModelTreeNode.buildTrees(this.models);
         logger.log("FOUND COMPONENTS:");
         logger.log(gson.toJson(this.assetModelsByName));
     }
@@ -85,6 +92,10 @@ public class SiteWiseModels {
         }
     }
 
+    public AssetModel findAssetModelByName(String assetModelName) {
+        return this.assetModelsByName.get(assetModelName);
+    }
+
     private ListAssetModelsResponse listAssetModels() {
         return getClient().listAssetModels(builder -> builder.maxResults(MAX_RESULTS));
     }
@@ -92,4 +103,6 @@ public class SiteWiseModels {
     private DescribeAssetModelResponse describeAssetModels(String assetModelId) {
         return getClient().describeAssetModel(builder -> builder.assetModelId(assetModelId));
     }
+
+
 }

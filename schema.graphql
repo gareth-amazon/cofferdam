@@ -59,13 +59,19 @@ type PropertyDefinition implements ResourceIdentifier{
     unit: String
 }
 
+type HierarchyDefinition {
+    id: String
+    modelId: String
+    name: String
+}
+
 type AssetModel implements Arn & ResourceIdentifier & Description {
     arn: String!
     id: String!
     name: String!
     description: String
     properties: [PropertyDefinition]!
-    #hierarchies: [Hierarchy!]!
+    hierarchies: [HierarchyDefinition]!
 }
 
 type Asset implements Arn & ResourceIdentifier & Description {
@@ -78,12 +84,53 @@ type Asset implements Arn & ResourceIdentifier & Description {
 }
 
 type ProjectDescription {
+    knowledgeGraphQuery: String!
     assets: [Asset]!
     models: [AssetModel]!
 }
 
+input BooleanValueMatch {
+    exactMatch: Boolean
+}
+
+input IntegerValueMatch {
+    exactMatch: Int
+}
+
+input DoubleValueMatch {
+    exactMatch: Float
+}
+
+input StringValueMatch {
+    exactMatch: String
+}
+
+input AtributeValueMatcher @oneOf {
+    booleanMatcher: BooleanValueMatch
+    intMatcher: IntegerValueMatch
+    doubleMatcher: DoubleValueMatch
+    stringMatcher: StringValueMatch
+}
+
+input AttributeMatcher {
+    name: String
+    value: AtributeValueMatcher
+}
+
+input ProjectFacet {
+    # One or more asset Names that you want to be the root of the project
+    assetIds: [String]
+    # One or more asset types that you want to be the root of the project
+    modelNames: [String]
+    # One or more property values that the assets should match
+    assetPropertyMatch: [AttributeMatcher]
+}
+
 input Project {
     workspaceName: String!
+    targets: ProjectFacet
+    ancestors: ProjectFacet
+    #descendants: ProjectFacet
 }
 
 type Query {

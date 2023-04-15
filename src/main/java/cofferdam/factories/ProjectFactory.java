@@ -1,19 +1,29 @@
 package cofferdam.factories;
 
-import cofferdam.generated.DgsConstants;
 import cofferdam.generated.types.Project;
 import cofferdam.util.JsonConverter;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 
 public class ProjectFactory {
-    private static final Logger logger = LogManager.getLogger(ProjectFactory.class);
-    public static Project build(Map<String, String> arguments) {
-        logger.info(new JsonConverter().toJson(arguments));
+    public static Project build(Map<String, String> arguments, LambdaLogger logger) {
+        String projectAsJson = new JsonConverter().toJson(arguments);
+        logger.log("PROJECT AS JSON:  " + projectAsJson);
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.readValue(projectAsJson, Project.class);
+
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+/*
         return Project.newBuilder()
                 .workspaceName(arguments.get(DgsConstants.PROJECT.WorkspaceName))
+                .targets()
                 .build();
+
+ */
     }
 }

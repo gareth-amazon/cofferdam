@@ -38,21 +38,16 @@ public class DescribeProjectHandler implements RequestHandler<Map<String, Object
         logger.log("ENVIRONMENT VARIABLES: " + gson.toJson(System.getenv()));
         logger.log("CONTEXT: " + gson.toJson(context));
         // process event
-        logger.log("INPUT: " + gson.toJson(input));
+        logger.log("RAW INPUT: " + gson.toJson(input));
 
         Map<String, String> arguments = (Map<String, String>) input.get("project");
-        Project project = ProjectFactory.build(arguments);
+        Project project = ProjectFactory.build(arguments, logger);
+        logger.log("PROJECT INPUT: " + gson.toJson(project));
 
         try {
-            SiteWiseModels models = new SiteWiseModels(logger, project.getWorkspaceName());
-            models.loadModelCache();
-            SiteWiseAttributeValues attributeValues = new SiteWiseAttributeValues(logger);
-
             TwinMakerKnowledgeGraphQuery knowledgeGraph = new TwinMakerKnowledgeGraphQuery(logger);
-            List<Asset> assets = knowledgeGraph.describeProject(project);
-            attributeValues.applyAttributeValues(assets);
 
-            ProjectDescription output = ProjectDescription.newBuilder().assets(assets).models(models.getModels(assets)).build();
+            ProjectDescription output = knowledgeGraph.describeProject(project);
             logger.log("OUTPUT: " + gson.toJson(output));
             return output;
         } catch (Exception e) {
