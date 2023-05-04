@@ -7,6 +7,30 @@ Resources:
   # Layer with build capabilities, automatically execute pip install -r requirements.txt -t installing libraries
   ######################################################################################################################
 
+  CofferdamLambdaFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+        Version: 2012-10-17
+      Policies:
+        - Statement:
+          - Sid: IotTwinMakerAccess
+            Effect: Allow
+            Action:
+              - iottwinmaker:*
+            Resource: '*'
+        - Statement:
+          - Sid: IotSiteWiseAccess
+            Effect: Allow
+            Action:
+              - iotsitewise:*
+            Resource: '*'
+
   GraphqlLogsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -33,33 +57,25 @@ Resources:
       RoleName:
         Fn::Sub: ${AWS::StackName}-Graphql-logs
 
-  CofferdamJavaFunction:
+  CofferdamProjectRootsJavaFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: cofferdam.DescribeProjectHandler::handleRequest
       Runtime: java11
       CodeUri: .
       MemorySize: 512
-      Policies:
-        - Statement:
-            - Sid: IotTwinMakerAccess
-              Effect: Allow
-              Action:
-                - iottwinmaker:*
-              Resource: '*'
-        - Statement:
-            - Sid: IotSiteWiseAccess
-              Effect: Allow
-              Action:
-                - iotsitewise:*
-              Resource: '*'
+      Role: !GetAtt CofferdamLambdaFunctionRole.Arn
       Timeout: 30
-      Events:
-        ProxyResource:
-          Type: Api
-          Properties:
-            Path: /{proxy+}
-            Method: any
+
+  CofferdamExpandTreeJavaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: cofferdam.ExpandTreeHandler::handleRequest
+      Runtime: java11
+      CodeUri: .
+      MemorySize: 512
+      Role: !GetAtt CofferdamLambdaFunctionRole.Arn
+      Timeout: 30
 
   CofferdamJavaFunctionInvokerRole:
     Type: AWS::IAM::Role
@@ -78,8 +94,10 @@ Resources:
                   - lambda:invokeFunction
                 Effect: Allow
                 Resource:
-                  - Fn::Sub: ${CofferdamJavaFunction.Arn}
-                  - Fn::Sub: ${CofferdamJavaFunction.Arn}:*
+                  - Fn::Sub: ${CofferdamProjectRootsJavaFunction.Arn}
+                  - Fn::Sub: ${CofferdamProjectRootsJavaFunction.Arn}:*
+                  - Fn::Sub: ${CofferdamExpandTreeJavaFunction.Arn}
+                  - Fn::Sub: ${CofferdamExpandTreeJavaFunction.Arn}:*
             Version: 2012-10-17
           PolicyName: Log
       RoleName:
@@ -108,7 +126,17 @@ Resources:
     Properties:
       ApiId: !GetAtt CofferdamAppSyncApi.ApiId
       LambdaConfig:
-        LambdaFunctionArn: !GetAtt CofferdamJavaFunction.Arn
+        LambdaFunctionArn: "CofferdamProjectRootsJavaFunction"
+      Name: DataSource
+      ServiceRoleArn: !GetAtt CofferdamJavaFunctionInvokerRole.Arn
+      Type: AWS_LAMBDA
+
+  CofferdamExpandTreeDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt CofferdamAppSyncApi.ApiId
+      LambdaConfig:
+        LambdaFunctionArn: "CofferdamExpendTreeJavaFunction"
       Name: DataSource
       ServiceRoleArn: !GetAtt CofferdamJavaFunctionInvokerRole.Arn
       Type: AWS_LAMBDA
@@ -119,11 +147,27 @@ Resources:
       ApiId: !GetAtt CofferdamAppSyncApi.ApiId
       DefinitionS3Location: ./schema.graphql
 
-  CofferdamAppSyncResolver:
+  CofferdamProjectRootsAppSyncResolver:
     Type: "AWS::AppSync::Resolver"
     Properties:
       ApiId: !GetAtt CofferdamAppSyncApi.ApiId
-      TypeName: "Query"
+      TypeName: "ProjectRootsQuery"
+      FieldName: "describeProject"
+      DataSourceName: !GetAtt CofferdamDataSource.Name
+      RequestMappingTemplate: |
+        {
+            "version" : "2017-02-28",
+            "operation": "Invoke",
+            "payload": $util.toJson($context.arguments)
+        }
+      ResponseMappingTemplate: |
+        $util.toJson($context.result)
+
+  CofferdamExpandTreeAppSyncResolver:
+    Type: "AWS::AppSync::Resolver"
+    Properties:
+      ApiId: !GetAtt CofferdamAppSyncApi.ApiId
+      TypeName: "ExpandProjectQuery"
       FieldName: "describeProject"
       DataSourceName: !GetAtt CofferdamDataSource.Name
       RequestMappingTemplate: |

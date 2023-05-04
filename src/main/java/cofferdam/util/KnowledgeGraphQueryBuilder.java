@@ -1,10 +1,10 @@
 package cofferdam.util;
 
-import graphql.com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 
 import java.util.ArrayList;
+import java.util.List;
 
 @Builder
 @AllArgsConstructor
@@ -12,23 +12,26 @@ public class KnowledgeGraphQueryBuilder {
     public static final int TARGET_COLUMN_INDEX = 0;
     public static final int ANCESTOR_COLUMN_INDEX = 1;
 
-    private String ancestorAssetId;
-    private String ancestorAssetName;
-    private String ancestorAssetModelId;
+    private List<String> ancestorAssetIds;
+    private List<String> ancestorAssetNames;
+    private List<String> ancestorAssetModelIds;
 
-    private String targetAssetId;
-    private String targetAssetName;
-    private String targetAssetModelId;
+    private List<String> targetAssetIds;
+    private List<String> targetAssetNames;
+    private List<String> targetAssetModelIds;
+
+    // ID of an asset that may be in the Project, the goal of the query is to test if this is true
+    private String testAssetId;
 
     private boolean hasAncestorAssetRestriction() {
-        return this.ancestorAssetId != null && !this.ancestorAssetId.isEmpty();
+        return this.ancestorAssetIds != null && !this.ancestorAssetIds.isEmpty();
     }
 
     private boolean hasAncestorAssetNameRestriction() {
-        return this.ancestorAssetName != null && !this.ancestorAssetName.isEmpty();
+        return this.ancestorAssetNames != null && !this.ancestorAssetNames.isEmpty();
     }
     private boolean hasAncestorModelRestriction() {
-        return this.ancestorAssetModelId != null && !this.ancestorAssetModelId.isEmpty();
+        return this.ancestorAssetModelIds != null && !this.ancestorAssetModelIds.isEmpty();
     }
 
     public boolean hasAncestorRestriction() {
@@ -38,15 +41,19 @@ public class KnowledgeGraphQueryBuilder {
     }
 
     private boolean hasTargetModelRestriction() {
-        return this.targetAssetModelId != null && !this.targetAssetModelId.isEmpty();
+        return this.targetAssetModelIds != null && !this.targetAssetModelIds.isEmpty();
     }
 
     private boolean hasTargetNameRestriction() {
-        return this.targetAssetName != null && !this.targetAssetName.isEmpty();
+        return this.targetAssetNames != null && !this.targetAssetNames.isEmpty();
     }
 
     private boolean hasTargetAssetIdRestriction() {
-        return this.targetAssetId != null && !this.targetAssetId.isEmpty();
+        return this.targetAssetIds != null && !this.targetAssetIds.isEmpty();
+    }
+
+    private boolean hasTestAssetId() {
+        return this.testAssetId != null && !this.testAssetId.isEmpty();
     }
 
     private void appendSelectClause(StringBuilder sb) {
@@ -54,6 +61,9 @@ public class KnowledgeGraphQueryBuilder {
         sb.append("target as Target");
         if (hasAncestorRestriction()) {
             sb.append(", ancestor as Ancestor");
+        }
+        if (hasTestAssetId()) {
+            sb.append(", test as Test");
         }
         sb.append("\n");
     }
@@ -69,11 +79,27 @@ public class KnowledgeGraphQueryBuilder {
             variables.add("ancestorComponents.properties as ancestorProperties");
         }
 
-        sb.append("(target),\n");
-
+        sb.append("(target)");
         variables.add("target.components as targetComponents");
         variables.add("targetComponents.properties as targetProperties");
+
+        if (this.hasTestAssetId()) {
+            sb.append("-[]->{1,5}(test)");
+            variables.add("test.components as testComponents");
+            variables.add("testComponents.properties as testProperties");
+        }
+
+        sb.append(",\n");
+
         sb.append(String.join(",\n", variables));
+    }
+
+    private String toInClause(List<String> matches) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("['");
+        String.join("', '", matches);
+        sb.append("']");
+        return sb.toString();
     }
 
     private void appendWhereClause(StringBuilder sb) {
@@ -82,41 +108,42 @@ public class KnowledgeGraphQueryBuilder {
         if (this.hasAncestorRestriction()) {
             if (hasAncestorModelRestriction()) {
                 restrictions.add("ancestorProperties.propertyName = 'sitewiseAssetModelId'");
-                restrictions.add("ancestorProperties.propertyValue = '" + this.ancestorAssetModelId +"'");
+                restrictions.add("ancestorProperties.propertyValue IN " + toInClause(this.ancestorAssetModelIds));
             } else if (this.hasAncestorAssetNameRestriction()) {
-                restrictions.add("ancestor.entityName = '" + this.ancestorAssetName +"'");
+                restrictions.add("ancestor.entityName IN " + toInClause(this.ancestorAssetNames));
             } else if (hasAncestorAssetRestriction()) {
                 restrictions.add("ancestorProperties.propertyName = 'sitewiseAssetId'");
-                restrictions.add("ancestorProperties.propertyValue = '" + this.ancestorAssetId +"'");
+                restrictions.add("ancestorProperties.propertyValue IN " + toInClause(this.ancestorAssetIds));
             }
         }
 
         if (this.hasTargetModelRestriction()){
             restrictions.add("targetProperties.propertyName = 'sitewiseAssetModelId'");
-            restrictions.add("targetProperties.propertyValue = '" + this.targetAssetModelId +"'");
+            restrictions.add("targetProperties.propertyValue IN " + toInClause(this.targetAssetModelIds));
         } else if (this.hasTargetNameRestriction()) {
-            restrictions.add("target.entityName = '" + this.targetAssetName +"'");
+            restrictions.add("target.entityName IN " + toInClause(this.targetAssetNames));
         } else if (this.hasTargetAssetIdRestriction()) {
             restrictions.add("targetProperties.propertyName = 'sitewiseAssetId'");
-            restrictions.add("targetProperties.propertyValue = '" + this.targetAssetId +"'");
+            restrictions.add("targetProperties.propertyValue IN " + toInClause(this.targetAssetIds));
+        }
+
+        if (this.hasTestAssetId()) {
+            restrictions.add("testProperties.propertyName = 'sitewiseAssetId'");
+            restrictions.add("testProperties.propertyValue IN ['" + this.testAssetId + "']");
         }
 
         sb.append(String.join("\n    AND ", restrictions));
     }
 
     /**
-     * Build a KG query for the root nodes of the Project
+     * Build a Knowledge Graph query for the root nodes of the Project
      * @return
      */
-    public String buildProjectRootsQuery() {
+    public String buildQuery() {
         StringBuilder sb = new StringBuilder();
         appendSelectClause(sb);
         appendFromClause(sb);
         appendWhereClause(sb);
         return sb.toString();
     }
-
-    // TODO:
-    // buildAssetIsPresentQuery
-    // buildAllDescendantsQuery
 }

@@ -6,6 +6,7 @@ package cofferdam;
 import cofferdam.cleints.TwinMakerKnowledgeGraphQuery;
 import cofferdam.factories.ProjectFactory;
 import cofferdam.generated.types.Project;
+import cofferdam.generated.types.ProjectAssetExpansion;
 import cofferdam.generated.types.ProjectDescription;
 import cofferdam.util.JsonConverter;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -19,14 +20,14 @@ import java.util.Map;
 /**
  * Handler for Hello World.
  */
-public class DescribeProjectHandler implements RequestHandler<Map<String, Object>, ProjectDescription> {
+public class ProjectExpandTreeHandler implements RequestHandler<Map<String, Object>, ProjectAssetExpansion> {
     private static final JsonConverter jsonConverter = new JsonConverter();
     private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
-    public DescribeProjectHandler() {
+    public ProjectExpandTreeHandler() {
     }
 
-    public ProjectDescription handleRequest(final Map<String, Object> input, final Context context) {
+    public ProjectAssetExpansion handleRequest(final Map<String, Object> input, final Context context) {
         LambdaLogger logger = context.getLogger();
         // log execution details
         logger.log("ENVIRONMENT VARIABLES: " + gson.toJson(System.getenv()));
@@ -37,11 +38,16 @@ public class DescribeProjectHandler implements RequestHandler<Map<String, Object
         Map<String, String> arguments = (Map<String, String>) input.get("project");
         Project project = ProjectFactory.build(arguments, logger);
         logger.log("PROJECT INPUT: " + gson.toJson(project));
+        String parentAssetId = (String) input.get("assetId");
 
         try {
             TwinMakerKnowledgeGraphQuery knowledgeGraph = new TwinMakerKnowledgeGraphQuery(logger);
-
-            ProjectDescription output = knowledgeGraph.describeProject(project);
+            // 1) Does this asset even exist? Is this asset in the project?
+            if (!knowledgeGraph.isAssetInProject(project, parentAssetId)) {
+                throw new RuntimeException("Action Not Authorized 403");
+            }
+            // 2) Load the assets immediate children:
+            ProjectAssetExpansion output = knowledgeGraph.describeChildren(parentAssetId, project);
             logger.log("OUTPUT: " + gson.toJson(output));
             return output;
         } catch (Exception e) {

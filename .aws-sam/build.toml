@@ -7,6 +7,6 @@ architecture = "x86_64"
 handler = "cofferdam.DescribeProjectHandler::handleRequest"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["CofferdamJavaFunction"]
+functions = ["CofferdamProjectRootsJavaFunction", "CofferdamExpandTreeJavaFunction"]
 
 [layer_build_definitions]

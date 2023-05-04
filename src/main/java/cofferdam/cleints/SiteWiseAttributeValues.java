@@ -36,7 +36,8 @@ public class SiteWiseAttributeValues {
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
                 .build();
     }
-    public void applyAttributeValues(List<Asset> assets){
+
+    public void applyAttributeValues(List<Asset> assets) {
         // TODO: Pagination & limits. Right now its not an issue with the limited size of the data
         IoTSiteWiseClient client = getClient();
         BatchGetAssetPropertyValueRequest.Builder requestBuilder = BatchGetAssetPropertyValueRequest.builder();
@@ -64,7 +65,7 @@ public class SiteWiseAttributeValues {
         BatchGetAssetPropertyValueResponse results = client.batchGetAssetPropertyValue(requestBuilder.build());
         results.successEntries().forEach(entry -> {
             Property prop = propLookup.get(entry.entryId());
-            // Note: we dont need to know the type here as all incorrect values will be null
+            // Note: we don't need to know the type here as all incorrect values will be null
             Variant value = entry.assetPropertyValue().value();
             prop.setValue(AttributeValue.newBuilder().booleanValue(value.booleanValue())
             .intValue(value.integerValue())

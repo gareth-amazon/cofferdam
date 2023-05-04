@@ -1,11 +1,17 @@
 package cofferdam.cleints;
 
 import cofferdam.factories.AssetFactory;
+import cofferdam.factories.HierarchyFactory;
 import cofferdam.generated.types.Asset;
+import cofferdam.generated.types.HierarchyContainer;
+import cofferdam.generated.types.HierarchyDefinition;
 import cofferdam.generated.types.Project;
+import cofferdam.generated.types.ProjectAssetExpansion;
 import cofferdam.generated.types.ProjectDescription;
 import cofferdam.generated.types.ProjectFacet;
+import cofferdam.types.Collator;
 import cofferdam.util.ArgumentUtils;
+import cofferdam.util.ChildrenQueryBuilder;
 import cofferdam.util.DocumentConverter;
 import cofferdam.util.KnowledgeGraphQueryBuilder;
 import cofferdam.util.ResourceIdentifierDistinctFilter;
@@ -23,6 +29,7 @@ import software.amazon.awssdk.services.iottwinmaker.model.Row;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 
 public class TwinMakerKnowledgeGraphQuery {
@@ -48,7 +55,7 @@ public class TwinMakerKnowledgeGraphQuery {
         SiteWiseAttributeValues attributeValues = new SiteWiseAttributeValues(logger);
 
         List<Asset> assets = new ArrayList<>();
-        final String query = buildQuery(project, models);
+        final String query = buildQuery(project, models).build().buildQuery();
         logger.log("KG QUERY: " + query);
         ExecuteQueryResponse response = queryKnowledgeGraph(query, project);
         for (Row row : response.rows()) {
@@ -72,40 +79,100 @@ public class TwinMakerKnowledgeGraphQuery {
                 .build();
     }
 
+    public boolean isAssetInProject(Project project, String testAssetId) {
+        SiteWiseModels models = new SiteWiseModels(this.logger, project.getWorkspaceName());
+        models.loadModelCache();
+        SiteWiseAttributeValues attributeValues = new SiteWiseAttributeValues(logger);
+
+        List<Asset> assets = new ArrayList<>();
+        final String query = buildQuery(project, models)
+                .testAssetId(testAssetId)
+                .build().buildQuery();
+        logger.log("KG EXISTS QUERY: " + query);
+        ExecuteQueryResponse response = queryKnowledgeGraph(query, project);
+        for (Row row : response.rows()) {
+            if (row.hasRowData()) {
+                Document targetDoc = row.rowData().get(KnowledgeGraphQueryBuilder.TARGET_COLUMN_INDEX);
+                if (targetDoc.isMap()) {
+                    assets.add(toAsset(targetDoc));
+                }
+            }
+        }
+
+
+        return !assets.isEmpty();
+    }
+
+    /**
+     * Describe the children of an Asset node
+     * @param parentAssetId
+     * @return
+     */
+    public ProjectAssetExpansion describeChildren(String parentAssetId, Project project) {
+        ChildrenQueryBuilder queryBuilder = ChildrenQueryBuilder.builder().parentAssetId(parentAssetId).build();
+        String query = queryBuilder.buildQuery();
+        ExecuteQueryResponse response = this.queryKnowledgeGraph(query, project);
+
+        Collator<HierarchyDefinition, Asset> hierarchyCollator = new Collator<>();
+        response.rows().stream().filter(row -> row.hasRowData())
+                .forEach(row -> {
+                    Document relationshipDoc = row.rowData().get(queryBuilder.getRelationshipColumnIndex());
+                    HierarchyDefinition hierarchy = toHierarchy(relationshipDoc);
+                    Document childAssetDoc = row.rowData().get(queryBuilder.getChildColumnIndex());
+                    Asset child = toAsset(childAssetDoc);
+                    hierarchyCollator.put(hierarchy, child);
+                });
+
+        SiteWiseAttributeValues attributeValues = new SiteWiseAttributeValues(logger);
+        List<Asset> allAssets = hierarchyCollator.contents().values().stream().flatMap(list -> list.stream()).collect(Collectors.toList());
+        attributeValues.applyAttributeValues(allAssets);
+
+        List<HierarchyContainer> children = hierarchyCollator.contents().entrySet().stream().map(entry -> HierarchyContainer.newBuilder()
+                .hierarchy(entry.getKey())
+                .assets(entry.getValue())
+                .build()).collect(Collectors.toList());
+
+        return ProjectAssetExpansion.newBuilder().children(children).build();
+    }
+
+    private HierarchyDefinition toHierarchy(Document relationshipDoc) {
+        Map<String, Object> hierachyData = new DocumentConverter().mapMapDocument(relationshipDoc);
+        HierarchyFactory hierarchyFactory = new HierarchyFactory(hierachyData);
+        return hierarchyFactory.buildHierarchy();
+    }
+
     private Asset toAsset(Document doc) {
         Map<String, Object> assetData = new DocumentConverter().mapMapDocument(doc);
-        //logger.log("ASSET (maybe?): " + gson.toJson(assetData));
         AssetFactory assetFactory = new AssetFactory(assetData);
         return assetFactory.buildAsset();
     }
 
-    private String buildQuery(Project project, SiteWiseModels models) {
+    private KnowledgeGraphQueryBuilder.KnowledgeGraphQueryBuilderBuilder buildQuery(Project project, SiteWiseModels models) {
         ProjectFacet targets = project.getTargets();
         KnowledgeGraphQueryBuilder.KnowledgeGraphQueryBuilderBuilder builder = KnowledgeGraphQueryBuilder.builder();
         if (targets == null) {
             throw new IllegalArgumentException("targets is required");
         }
         if (ArgumentUtils.isNotEmpty(targets.getAssetIds())) {
-            // TODO: when OR is supported, add all IDs
-            builder.targetAssetId(targets.getAssetIds().get(0));
+            builder.targetAssetIds(targets.getAssetIds());
         } else if (ArgumentUtils.isNotEmpty(targets.getModelNames())) {
-            // TODO: when OR is supported, add all model IDs
-            String modelName = targets.getModelNames().get(0);
-            builder.targetAssetModelId(models.findAssetModelByName(modelName).getId());
+            List<String> modelIds = targets.getModelNames().stream()
+                    .map(modelName -> models.findAssetModelByName(modelName).getId()).collect(Collectors.toList());
+            builder.targetAssetModelIds(modelIds);
         }
         ProjectFacet ancestors = project.getAncestors();
         if (ancestors != null) {
             if (ArgumentUtils.isNotEmpty(ancestors.getAssetIds())) {
-                // TODO: when OR is supported, add all IDs
-                builder.ancestorAssetId(ancestors.getAssetIds().get(0));
+
+                builder.ancestorAssetIds(ancestors.getAssetIds());
             } else if (ArgumentUtils.isNotEmpty(ancestors.getModelNames())) {
-                // TODO: when OR is supported, add all model IDs
-                String modelName = ancestors.getModelNames().get(0);
-                builder.ancestorAssetModelId(models.findAssetModelByName(modelName).getId());
+                List<String> modelIds = ancestors.getModelNames().stream()
+                        .map(modelName -> models.findAssetModelByName(modelName).getId()).collect(Collectors.toList());
+                builder.ancestorAssetModelIds(modelIds);
             }
         }
 
-        return builder.build().buildProjectRootsQuery();
+        return builder;
     }
 
     private ExecuteQueryResponse queryKnowledgeGraph(String query, Project project) {

@@ -18,12 +18,5 @@ public class ProjectFactory {
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
-/*
-        return Project.newBuilder()
-                .workspaceName(arguments.get(DgsConstants.PROJECT.WorkspaceName))
-                .targets()
-                .build();
-
- */
     }
 }

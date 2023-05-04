@@ -44,12 +44,6 @@ type Property implements ResourceIdentifier {
     value: AttributeValue
 }
 
-type Hierarchy implements ResourceIdentifier {
-    id: String!
-    name: String!
-    childAssetModelId: String!
-}
-
 type PropertyDefinition implements ResourceIdentifier{
     id: String!
     name: String!
@@ -89,6 +83,16 @@ type ProjectDescription {
     models: [AssetModel]!
 }
 
+type ProjectAssetExpansion {
+    parent: Asset!
+    children: [HierarchyContainer]!
+}
+
+type HierarchyContainer {
+    hierarchy: HierarchyDefinition!
+    assets: [Asset]!
+}
+
 input BooleanValueMatch {
     exactMatch: Boolean
 }
@@ -105,7 +109,7 @@ input StringValueMatch {
     exactMatch: String
 }
 
-input AtributeValueMatcher @oneOf {
+input AttributeValueMatcher @oneOf {
     booleanMatcher: BooleanValueMatch
     intMatcher: IntegerValueMatch
     doubleMatcher: DoubleValueMatch
@@ -114,7 +118,7 @@ input AtributeValueMatcher @oneOf {
 
 input AttributeMatcher {
     name: String
-    value: AtributeValueMatcher
+    value: AttributeValueMatcher
 }
 
 input ProjectFacet {
@@ -130,9 +134,12 @@ input Project {
     workspaceName: String!
     targets: ProjectFacet
     ancestors: ProjectFacet
-    #descendants: ProjectFacet
 }
 
-type Query {
+type ProjectRootsQuery {
     describeProject(project: Project): ProjectDescription!
+}
+
+type ExpandProjectQuery {
+    expandProjectNode(project: Project, assetId: String): ProjectAssetExpansion!
 }
